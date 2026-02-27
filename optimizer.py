@@ -6,7 +6,7 @@ class SimulatedAnnealing:
         self.env = env
         self.vpm_rates = vpm_rates
 
-    def optimize(self, initial_temp=100.0, cooling_rate=0.99, iterations=1200):
+    def optimize(self, initial_temp=100.0, cooling_rate=0.99, iterations=2000):
         total_green = self.env.C - self.env.total_clearance
         
         # Start at the logical center (27/27) 

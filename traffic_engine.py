@@ -2,73 +2,69 @@ import math
 
 class TrafficEnvironment:
     def __init__(self, cycle_length=60, t_total_clearance=6):
-        """
-        Initializes the traffic environment for the 7th Avenue intersection.
-        """
-        self.C = cycle_length 
-        # Total time lost to non-green lights in one full cycle
-        self.total_clearance = t_total_clearance 
-        # Time lost per phase transition
+        # Full signal cycle time (seconds)
+        self.cycle_time = cycle_length
+        
+        # Total yellow + all-red time in one full cycle
+        self.total_clearance_time = t_total_clearance
+        
+        # Clearance time between two phases
         self.clearance_per_phase = t_total_clearance / 2
         
-        # Horizon set to 10 minutes to capture long-term queue behavior
-        self.horizon = 600  
+        # Simulation runs for 10 minutes (in seconds)
+        self.simulation_duration = 600
         
-        # Multi-lane saturation flow rate (approx 100 VPM capacity)
-        self.saturation_flow_rate = 1.67 
+        # Maximum number of cars that can leave per second during green
+        self.rate_of_outgoing_cars = 1.67  
 
-    def get_total_delay(self, g_ns, g_ew, vpm_rates):
-        """
-        Calculates the normalized delay and penalty for a given timing plan.
-        """
-        # 1. Validation: Ensure the timings actually fit the cycle
-        if abs((g_ns + g_ew + self.total_clearance) - self.C) > 0.1:
+    def get_total_delay(self, green_ns, green_ew, cars_per_minute):
+        
+        # Make sure timings actually fit inside one cycle
+        if abs((green_ns + green_ew + self.total_clearance_time) - self.cycle_time) > 0.1:
             return float('inf')
 
-        queues = {'N': 0.0, 'S': 0.0, 'E': 0.0, 'W': 0.0}
-        total_delay = 0.0
-        total_vehicles = 0.0
-        
-        # 2. Define exact green windows within the cycle
-        # NS Green Phase
-        ns_start, ns_end = 0, g_ns
-        
-        # EW Green Phase (Starts after NS Green + First Clearance Phase)
-        ew_start = g_ns + self.clearance_per_phase
-        ew_end = ew_start + g_ew
+        waiting_cars = {'N': 0.0, 'S': 0.0, 'E': 0.0, 'W': 0.0}
+        total_wait_time = 0.0
+        total_cars_arrived = 0.0
 
-        # 3. Time-Stepped Simulation
-        for t in range(self.horizon):
-            cycle_t = t % self.C
-            
-            # Check if current second falls within the respective green windows
-            is_ns_green = ns_start <= cycle_t < ns_end
-            is_ew_green = ew_start <= cycle_t < ew_end
+        # Green windows
+        ns_green_start, ns_green_end = 0, green_ns
 
-            for d in ['N', 'S', 'E', 'W']:
-                # Determine arrival rate per second
-                arrival_rate = vpm_rates[d] / 60.0
-                queues[d] += arrival_rate
-                total_vehicles += arrival_rate
+        ew_green_start = green_ns + self.clearance_per_phase
+        ew_green_end = ew_green_start + green_ew
 
-                # Discharge logic: vehicles exit only during green
-                if (d in 'NS' and is_ns_green) or (d in 'EW' and is_ew_green):
-                    queues[d] = max(0.0, queues[d] - self.saturation_flow_rate)
-                
-                # Accumulate delay based on the current queue size
-                total_delay += queues[d]
+        # Second-by-second simulation
+        for current_second in range(self.simulation_duration):
+            position_in_cycle = current_second % self.cycle_time
 
-        # 4. Oversaturation Penalty Logic
-        # Instead of penalizing the max queue blindly (which artificially forces 
-        # balanced splits even for unbalanced traffic), we only penalize queues
-        # that exceed their structural minimum (meaning the phase is saturated
-        # and its queue is permanently growing).
-        over_penalty = 0.0
-        for d in ['N', 'S', 'E', 'W']:
-            arrival_rate_per_sec = vpm_rates[d] / 60.0
-            max_normal_queue = arrival_rate_per_sec * self.C
-            if queues[d] > max_normal_queue:
-                over_penalty += ((queues[d] - max_normal_queue) ** 2) * 50
-        
-        # Return normalized average delay + the true oversaturation penalty
-        return (total_delay + over_penalty) / max(0.001, total_vehicles)
+            ns_is_green = ns_green_start <= position_in_cycle < ns_green_end
+            ew_is_green = ew_green_start <= position_in_cycle < ew_green_end
+
+            for direction in ['N', 'S', 'E', 'W']:
+
+                # Cars arriving this second
+                cars_arriving_per_second = cars_per_minute[direction] / 60.0
+                waiting_cars[direction] += cars_arriving_per_second
+                total_cars_arrived += cars_arriving_per_second
+
+                # Cars leaving only during green
+                if (direction in 'NS' and ns_is_green) or (direction in 'EW' and ew_is_green):
+                    waiting_cars[direction] = max(
+                        0.0,
+                        waiting_cars[direction] - self.rate_of_outgoing_cars
+                    )
+
+                # Add current queue to total delay
+                total_wait_time += waiting_cars[direction]
+
+        # Oversaturation penalty
+        penalty = 0.0
+        for direction in ['N', 'S', 'E', 'W']:
+            arrival_rate_sec = cars_per_minute[direction] / 60.0
+            max_normal_queue = arrival_rate_sec * self.cycle_time
+
+            if waiting_cars[direction] > max_normal_queue:
+                penalty += ((waiting_cars[direction] - max_normal_queue) ** 2) * 50
+
+        # Normalized delay
+        return (total_wait_time + penalty) / max(0.001, total_cars_arrived)

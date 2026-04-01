@@ -61,6 +61,10 @@ if st.button("Run AI Optimization", type="primary"):
         max(0.01, baseline_delay)
     ) * 100
 
+    if improvement_percent >= 10.0:
+        st.success(f"Success Threshold Met: {improvement_percent:.1f}% Reduction")
+    else:
+        st.warning(f"Marginal Improvement: {improvement_percent:.1f}% Reduction (Below 10% Goal)")
     col3.metric("Delay Reduction", f"{improvement_percent:.1f}%")
 
     # Comparison chart

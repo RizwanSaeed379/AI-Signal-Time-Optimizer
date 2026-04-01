@@ -6,7 +6,7 @@ class SimulatedAnnealing:
         self.environment = environment
         self.cars_per_minute = cars_per_minute
 
-    def optimize(self, starting_temperature=100.0, cooling_rate=0.99, iterations=2000):
+    def optimize(self, starting_temperature=150.0, cooling_rate=0.995, iterations=2000):
 
         total_green_time = self.environment.cycle_time - self.environment.total_clearance_time
 
